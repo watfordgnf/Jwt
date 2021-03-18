@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using JsonWebToken.Cryptography;
@@ -699,6 +700,8 @@ namespace JsonWebToken
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.certificate);
             }
 
+            SignatureAlgorithm? alg = TryReadSignatureAlgorithmFromCertificate(certificate);
+
             AsymmetricJwk? key = null;
             if (withPrivateKey)
             {
@@ -706,7 +709,7 @@ namespace JsonWebToken
                 if (!(rsa is null))
                 {
                     var rsaParameters = rsa.ExportParameters(withPrivateKey);
-                    key = new RsaJwk(rsaParameters);
+                    key = alg != null ? new RsaJwk(rsaParameters, alg) : new RsaJwk(rsaParameters);
                 }
 #if SUPPORT_ELLIPTIC_CURVE
                 else
@@ -715,7 +718,7 @@ namespace JsonWebToken
                     if (!(ecdsa is null))
                     {
                         var ecParameters = ecdsa.ExportParameters(withPrivateKey);
-                        key = new ECJwk(ecParameters);
+                        key = alg != null ? new ECJwk(ecParameters, alg) : new ECJwk(ecParameters);
                     }
                 }
 #endif
@@ -726,7 +729,7 @@ namespace JsonWebToken
                 if (!(rsa is null))
                 {
                     var rsaParameters = rsa.ExportParameters(withPrivateKey);
-                    key = new RsaJwk(rsaParameters);
+                    key = alg != null ? new RsaJwk(rsaParameters, alg) : new RsaJwk(rsaParameters);
                 }
 #if SUPPORT_ELLIPTIC_CURVE
                 else
@@ -735,7 +738,7 @@ namespace JsonWebToken
                     if (!(ecdsa is null))
                     {
                         var ecParameters = ecdsa.ExportParameters(withPrivateKey);
-                        key = new ECJwk(ecParameters);
+                        key = alg != null ? new ECJwk(ecParameters, alg) : new ECJwk(ecParameters);
                     }
                 }
 #endif
@@ -751,6 +754,29 @@ namespace JsonWebToken
             key.ComputeThumbprint(thumbprint);
             key.Kid = Utf8.GetString(thumbprint);
             return key;
+        }
+
+        private static SignatureAlgorithm? TryReadSignatureAlgorithmFromCertificate(X509Certificate2 certificate)
+        {
+            switch (certificate.SignatureAlgorithm.Value)
+            {
+                case Oids.RsaPkcs1Sha256:
+                    return SignatureAlgorithm.RsaSha256;
+                case Oids.RsaPkcs1Sha384:
+                    return SignatureAlgorithm.RsaSha384;
+                case Oids.RsaPkcs1Sha512:
+                    return SignatureAlgorithm.RsaSha512;
+                case Oids.ECDsaWithSha256:
+                    return SignatureAlgorithm.EcdsaSha256;
+                case Oids.ECDsaWithSha384:
+                    return SignatureAlgorithm.EcdsaSha384;
+                case Oids.ECDsaWithSha512:
+                    return SignatureAlgorithm.EcdsaSha512;
+                // no means to easily retrieve RSA-PSS Signature Parameters from X509Certificate2
+                // case Oids.RsaPss:
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
